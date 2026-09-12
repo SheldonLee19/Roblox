@@ -12,8 +12,12 @@
 	  before anything else tries to touch a profile.
 
 	  EconomyService next. It listens for ProfileLoaded to push the initial
-	  balance to the client, and it is the writer every gameplay service
-	  pays out through.
+	  balance to the client, and it is the writer every gameplay service pays
+	  out through.
+
+	  WorldService before HousingService. Housing renders villas onto plots
+	  that WorldService generates; starting housing first would leave it with
+	  no plots to render onto.
 
 	Adding a service that depends on the economy therefore goes after both.
 	There is no dependency graph here on purpose -- with a three-person team
@@ -23,8 +27,12 @@
 
 local DataService = require(script.Services.DataService)
 local EconomyService = require(script.Services.EconomyService)
+local WorldService = require(script.Services.WorldService)
+local HousingService = require(script.Services.HousingService)
 
 DataService.Start()
 EconomyService.Start()
+WorldService.Start()
+HousingService.Start()
 
 print("[Tropical Archipelago] Server ready.")

@@ -6,6 +6,18 @@
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"
+      },
+      "Assets": {
+        "$className": "Folder",
+        "Villas": {
+          "$className": "Folder"
+        },
+        "Vehicles": {
+          "$className": "Folder"
+        },
+        "Cosmetics": {
+          "$className": "Folder"
+        }
       }
     },
 
@@ -25,44 +37,48 @@
 
     "Workspace": {
       "$properties": {
-        "FilteringEnabled": true
+        "FilteringEnabled": true,
+        "StreamingEnabled": true,
+        "StreamingMinRadius": 256,
+        "StreamingTargetRadius": 1200
+      }
+    },
+
+    "Lighting": {
+      "$properties": {
+        "Ambient": [0.27, 0.27, 0.31],
+        "OutdoorAmbient": [0.55, 0.58, 0.62],
+        "Brightness": 3,
+        "ClockTime": 14,
+        "GeographicLatitude": 12,
+        "GlobalShadows": true,
+        "Outlines": false,
+        "EnvironmentDiffuseScale": 0.4,
+        "EnvironmentSpecularScale": 0.4,
+        "Technology": "ShadowMap"
       },
-      "Baseplate": {
-        "$className": "Part",
+      "Atmosphere": {
+        "$className": "Atmosphere",
         "$properties": {
-          "Anchored": true,
-          "Color": [
-            0.38823,
-            0.37254,
-            0.38823
-          ],
-          "Locked": true,
-          "Position": [
-            0,
-            -10,
-            0
-          ],
-          "Size": [
-            512,
-            20,
-            512
-          ]
+          "Density": 0.32,
+          "Offset": 0.25,
+          "Haze": 1.6,
+          "Glare": 0.1,
+          "Color": [0.78, 0.85, 0.92],
+          "Decay": [0.42, 0.58, 0.75]
+        }
+      },
+      "TropicalGrade": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Brightness": 0.02,
+          "Contrast": 0.12,
+          "Saturation": 0.22,
+          "TintColor": [1, 0.99, 0.94]
         }
       }
     },
-    "Lighting": {
-      "$properties": {
-        "Ambient": [
-          0,
-          0,
-          0
-        ],
-        "Brightness": 2,
-        "GlobalShadows": true,
-        "Outlines": false,
-        "Technology": "Voxel"
-      }
-    },
+
     "SoundService": {
       "$properties": {
         "RespectFilteringEnabled": true

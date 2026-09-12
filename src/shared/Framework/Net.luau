@@ -45,6 +45,7 @@ local C2S_EVENTS = {
 local S2C_EVENTS = {
 	"ProfileUpdated",
 	"CurrencyChanged",
+	"HousingUpdated",
 	"RoundStateChanged",
 	"Notification",
 	"MatchFound",
