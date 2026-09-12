@@ -140,30 +140,48 @@ end
 --------------------------------------------------------------------------
 
 --[[
-	A single large anchored part standing in for the ocean.
+	Terrain water rather than a big Part.
 
-	Deliberately a part rather than filled Terrain water. Terrain is the right
-	answer eventually -- it gives real swimming and buoyancy -- but filling a
-	2km square of voxels at every server boot is a multi-second startup cost,
-	and right now the goal is to see the map. The tradeoff is that players walk
-	on the ocean surface instead of swimming in it.
+	The first pass used a single 2400-stud part with Enum.Material.Water and
+	Transparency 0.25. That part is the entire cause of the "transparent
+	triangular cuts and tearing around the hub": transparent geometry is
+	depth-sorted per-part, and one transparent part spanning the whole map
+	intersects every island, so the renderer drew it over land in patches and
+	ripped it apart as StreamingEnabled streamed chunks in and out. Terrain
+	water is a dedicated continuous surface with correct depth, so it neither
+	z-fights with the islands nor tears under streaming, and it gives real
+	swimming for free.
 
-	Swapping to Terrain later is contained to this function.
+	The fill is coarse (resolution 4) and done once at boot; the surface is
+	flat regardless of resolution, so there is no visual cost to being coarse.
 ]]
-local function buildOcean(parent: Folder): ()
+local function buildOcean(): ()
+	local terrain = workspace.Terrain
 	local extent = World.WaterExtent
+	local halfExtent = extent / 2
 
-	local ocean = makeBox(
-		parent,
-		"Ocean",
-		Vector3.new(extent, 40, extent),
-		CFrame.new(0, World.WaterLevel - 20, 0),
-		Color3.fromRGB(28, 138, 184),
-		Enum.Material.Water
+	-- Terrain's default voxel grid is far smaller than this map (islands sit
+	-- at radius 480, arenas at 1000). Expand the grid first or the fill below
+	-- is clipped to the default bounds and the ocean stops short of the arena
+	-- ring. MaxExtents is measured in 4-stud voxels.
+	local halfVoxels = math.ceil(halfExtent / 4) + 8
+	terrain.MaxExtents = Region3int16.new(
+		Vector3int16.new(-halfVoxels, -32, -halfVoxels),
+		Vector3int16.new(halfVoxels, 32, halfVoxels)
 	)
-	ocean.Transparency = 0.25
-	ocean.Reflectance = 0.1
-	ocean.Name = "Ocean"
+
+	local region = Region3.new(
+		Vector3.new(-halfExtent, World.WaterLevel - World.WaterDepth, -halfExtent),
+		Vector3.new(halfExtent, World.WaterLevel, halfExtent)
+	)
+	terrain:FillRegion(region, 4, Enum.Material.Water)
+
+	-- Surface tuning lives on Terrain, not on a part.
+	terrain.WaterColor = Color3.fromRGB(28, 138, 184)
+	terrain.WaterWaveSize = 0.15
+	terrain.WaterWaveSpeed = 12
+	terrain.WaterReflectance = 0.05
+	terrain.WaterTransparency = 0.2
 end
 
 --------------------------------------------------------------------------
@@ -465,7 +483,17 @@ function WorldService.Start(): ()
 	worldRoot.Name = "World"
 	worldRoot.Parent = workspace
 
-	buildOcean(worldRoot)
+	-- Rojo never deletes unmanaged instances, so a Baseplate left over from
+	-- before the project.json rewrite survives re-serves and z-fights with the
+	-- water surface. Remove it here so playtests are clean without a manual
+	-- Studio step.
+	local baseplate = workspace:FindFirstChild("Baseplate")
+	if baseplate and baseplate:IsA("BasePart") then
+		baseplate:Destroy()
+		print("[WorldService] Removed leftover Studio Baseplate.")
+	end
+
+	buildOcean()
 	buildHub(worldRoot)
 	buildIslands(worldRoot)
 	buildArenaPads(worldRoot)

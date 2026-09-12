@@ -7,19 +7,21 @@
 	config edit rather than a rewrite.
 
 	Coordinate convention: the water surface sits at Y = 0. Land discs are
-	centred slightly below it so their tops read as beaches a few studs above
-	the waterline. Everything is laid out on concentric rings around the hub
-	at the origin, which keeps the map readable from any angle and makes
-	"which island is that" answerable by looking at the compass.
+	centred so their tops sit ~4 studs ABOVE the waterline, so the land clears
+	the waves instead of sitting flush with them (flush tops were the cause of
+	the "island looks submerged" artifact). Everything is laid out on
+	concentric rings around the hub at the origin.
 ]]
 
 local World = {}
 
 World.WaterLevel = 0
-World.SeabedY = -70
 
--- Water is filled as a block rather than a plane so players can actually
--- swim down into it instead of hitting an invisible floor.
+-- Depth of the filled water column. 20 studs is plenty to look deep while
+-- keeping the Terrain fill cheap at boot (a full voxel ocean to the seabed
+-- is a multi-second startup hitch for no visual benefit).
+World.WaterDepth = 20
+
 World.WaterExtent = 2400
 
 --[[
@@ -33,7 +35,7 @@ World.WaterExtent = 2400
 World.Hub = {
 	Radius = 150,
 	Thickness = 10,
-	Y = -5,
+	Y = -1,
 
 	-- The two activity circles, offset left and right along X.
 	CircleRadius = 46,
@@ -54,7 +56,7 @@ World.Islands = {
 	RingRadius = 480,
 	Radius = 68,
 	Thickness = 8,
-	Y = -4,
+	Y = 0,
 	-- Offset so no island sits exactly on the +X axis, which keeps the ring
 	-- reading as a ring rather than as "the one straight ahead".
 	AngleOffset = 22.5,
@@ -71,7 +73,7 @@ World.Arenas = {
 	RingRadius = 1000,
 	Radius = 110,
 	Thickness = 6,
-	Y = -3,
+	Y = 1,
 }
 
 World.Palette = {
