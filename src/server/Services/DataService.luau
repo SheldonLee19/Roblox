@@ -75,8 +75,47 @@ local store = DataStoreService:GetDataStore(STORE_NAME)
 -- player -> Profile
 local profiles: { [Player]: any } = {}
 
+--[[
+	In-memory fallback store.
+
+	Studio with "Enable Studio Access to API Services" switched off cannot
+	reach DataStore -- every UpdateAsync throws. Rather than kick every
+	playtest (which a bare DataStore would force), we fall back to a plain Lua
+	table so testing is unblocked. Progress against this store lives only for
+	the duration of the Studio session.
+
+	The fallback is Studio-only. In production a failed probe does NOT flip
+	this flag: on a live server a down DataStore should kick players rather
+	than silently hand them a profile that will vanish, because vanishing
+	progress is worse than an honest "please rejoin".
+]]
+local memoryStore: { [string]: any } = {}
+local useMemoryStore = false
+
 local function profileKey(player: Player): string
 	return "Player_" .. tostring(player.UserId)
+end
+
+--[[
+	UpdateAsync dispatch.
+
+	Mirrors DataStore's contract: the transform reads the current value (nil if
+	absent) and returns nil to abort the write, or the value to store. On the
+	memory path this is synchronous and cannot fail, so it returns (true, ...)
+	to stay shape-compatible with the DataStore path's pcall result.
+]]
+local function updateAsync(key: string, transform: (any) -> any): (boolean, any)
+	if useMemoryStore then
+		local result = transform(memoryStore[key])
+		if result ~= nil then
+			memoryStore[key] = result
+		end
+		return true, result
+	end
+
+	return pcall(function()
+		return store:UpdateAsync(key, transform)
+	end)
 end
 
 --------------------------------------------------------------------------
@@ -119,19 +158,17 @@ function Profile.Save(self: any, release: boolean?): (boolean, string?)
 		payload.Lock = { JobId = JOB_ID, Timestamp = os.time() }
 	end
 
-	local success, err = pcall(function()
-		return store:UpdateAsync(profileKey(self.Player), function(existing: any)
-			if existing ~= nil then
-				local lock = existing.Lock
-				if lock ~= nil and lock.JobId ~= JOB_ID then
-					-- Someone else owns this profile now. Refuse the write
-					-- rather than clobber them.
-					return nil
-				end
+	local success, err = updateAsync(profileKey(self.Player), function(existing: any)
+		if existing ~= nil then
+			local lock = existing.Lock
+			if lock ~= nil and lock.JobId ~= JOB_ID then
+				-- Someone else owns this profile now. Refuse the write
+				-- rather than clobber them.
+				return nil
 			end
+		end
 
-			return payload
-		end)
+		return payload
 	end)
 
 	if not success then
@@ -176,33 +213,31 @@ local function loadProfile(player: Player): (any?, string?)
 	local key = profileKey(player)
 
 	for attempt = 1, MAX_LOAD_ATTEMPTS do
-		local success, resultOrErr = pcall(function()
-			return store:UpdateAsync(key, function(existing: any)
-				local now = os.time()
+		local success, resultOrErr = updateAsync(key, function(existing: any)
+			local now = os.time()
 
-				if existing == nil then
-					-- Brand new player.
-					return {
-						Data = ProfileTemplate.create(),
-						Lock = { JobId = JOB_ID, Timestamp = now },
-					}
+			if existing == nil then
+				-- Brand new player.
+				return {
+					Data = ProfileTemplate.create(),
+					Lock = { JobId = JOB_ID, Timestamp = now },
+				}
+			end
+
+			local lock = existing.Lock
+			if lock ~= nil and lock.JobId ~= JOB_ID then
+				local age = now - (lock.Timestamp or 0)
+				if age < LOCK_TIMEOUT_SECONDS then
+					-- Held by a live server. Returning nil aborts the
+					-- write entirely, so we cannot accidentally take a
+					-- lock while merely trying to read.
+					return nil
 				end
+			end
 
-				local lock = existing.Lock
-				if lock ~= nil and lock.JobId ~= JOB_ID then
-					local age = now - (lock.Timestamp or 0)
-					if age < LOCK_TIMEOUT_SECONDS then
-						-- Held by a live server. Returning nil aborts the
-						-- write entirely, so we cannot accidentally take a
-						-- lock while merely trying to read.
-						return nil
-					end
-				end
-
-				existing.Data = ProfileTemplate.migrate(existing.Data or ProfileTemplate.create())
-				existing.Lock = { JobId = JOB_ID, Timestamp = now }
-				return existing
-			end)
+			existing.Data = ProfileTemplate.migrate(existing.Data or ProfileTemplate.create())
+			existing.Lock = { JobId = JOB_ID, Timestamp = now }
+			return existing
 		end)
 
 		if not success then
@@ -322,6 +357,24 @@ function DataService.Start(): ()
 		return
 	end
 	started = true
+
+	-- Probe DataStore once, before any player can join. Studio with API
+	-- services disabled throws on every DataStore call; catching that here
+	-- lets us fall back to memory instead of kicking every playtest. In
+	-- production RunService:IsStudio() is false, so a down DataStore still
+	-- kicks players rather than silently discarding their progress.
+	if RunService:IsStudio() then
+		local probeOk = pcall(function()
+			store:UpdateAsync("__probe__", function()
+				return { probe = true }
+			end)
+		end)
+
+		if not probeOk then
+			useMemoryStore = true
+			warn("[DataService] DataStore unavailable in Studio (API services disabled). Using in-memory store; progress will not persist across Studio sessions.")
+		end
+	end
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(onPlayerRemoving)
